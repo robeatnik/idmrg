@@ -46,7 +46,7 @@ def idmrg(B,s,N,d,Lp,Rp,w,chi,H_bond):
         n_step = 1
     # Now the iterations
     for step in range(N):
-        E = [] # why here a E[]? and everything seems ok if I comment this?
+        E = [] # why here an E[]? and everything seems ok if I comment this?
         for i_bond in [0,1]:
             ia = np.mod(i_bond-1,2); ib = np.mod(i_bond,2); ic = np.mod(i_bond+1,2)
             chia = B[ib].shape[1]; chic = B[ic].shape[2]
@@ -110,7 +110,8 @@ def main():
 
 
     # First define the parameters of the model / simulation
-    g=0.5; d=2; N=14
+    g=0.5; d=2;
+    N=FLAGS.N
     chi = FLAGS.chi
     J = FLAGS.J
     n_chi = FLAGS.n_chi
@@ -165,7 +166,7 @@ def main():
             E.append(np.squeeze(np.tensordot(np.conj(sBB),C,
                                              axes=([0,3,1,2],[0,1,2,3]))).item())
         Energy_with_dffrt_chi.append(np.mean(E))
-        print("chi={},E_iDMRG ={}".format(chi2,np.mean(E)))
+        print("E_iDMRG ={}, chi={}".format(np.mean(E), chi2))
 
 
 
@@ -174,22 +175,31 @@ def main():
     # E0_exact = integrate.quad(f, 0, np.pi, args=(g,))[0]
     # print("E_exact =", E0_exact)
 
-    fig, ax = plt.subplots(1,2)
-    ax[0].plot(range(len(energy)),energy)
-    ax[0].set_xlabel('Step')
-    ax[0].set_ylabel('GS energy')
-    ax[1].set_xlabel('$\chi$')
-    ax[1].plot(range(chi2,chi2+n_chi),Energy_with_dffrt_chi)
+    # # exact GS energy for BLB with theta = arctan(1/3)
+    print("E_exact = ", -1/6.*3/np.sqrt(10))
 
-    plt.ylim(-1.5,-1)
+    # plot energy vs step&chi
+    fig, ax = plt.subplots(1,1)
+    ax.set_ylabel('GS energy')
+
+    ax.plot(range(chi2,chi2+n_chi),Energy_with_dffrt_chi)
+    ax.set_xlabel('$\chi$')
+    ax.set_ylim(-1.6,-1.4)
+    ax.set_title('$N = {}$'.format(N))
     plt.tight_layout()
-    plt.show()
+    plt.savefig('N_{}.png'.format(N))
 
+
+    # ax.plot(range(len(energy)),energy)
+    # ax.set_xlabel('Step')
+    # ax.set_title('$\chi = {}$'.format(chi2))
+    # plt.tight_layout()
+    # plt.savefig('chi_{}.png'.format(chi2))
+
+    # output the Entanglement Spectrum
     print('Bipartition Entanglement Spectrum')
-    x,y,z = np.linalg.svd(Psi[-1])
-    es = -np.log(y)
+    es = -np.log(np.mean(np.array(s), axis=0))
     es = np.sort(es)
-
     ES = pd.Series([1],index=[es[0]])
     j = 0;k = 1
     for i in es[1:]:
@@ -198,20 +208,24 @@ def main():
         else:
             ES = ES.append(pd.Series([1],index=[i]))
             j += ES[es[j]]
-    print(ES)
-
+    df = pd.DataFrame({'Entanglement energy': ES.index,
+                       'Degeneracy': ES.data},
+                       columns=['Entanglement energy', 'Degeneracy'])
+    print(df)
 
 
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()
-    parser.add_argument('--chi',type=int, default=15,
+    parser.add_argument('--chi',type=int, default=20,
                         help='bond dimension')
     parser.add_argument('--J',type=float, default=1.,
                         help='J')
-    parser.add_argument('--n_chi',type=int, default=5,
+    parser.add_argument('--n_chi',type=int, default=1,
                         help='n_chi')
-    parser.add_argument('--theta',type=float, default=0,
+    parser.add_argument('--theta',type=float, default=np.arctan(1/3.)/np.pi,
                         help='theta in unit of pi')
+    parser.add_argument('--N',type=int, default=15,
+                        help='number of steps')
     FLAGS = parser.parse_args()
     main()
