@@ -9,6 +9,7 @@ import scipy.sparse.linalg.eigen.arpack as arp
 import argparse
 import pandas as pd
 import matplotlib.pyplot as plt
+from exact import degenerate_
 FLAGS = None
 
 
@@ -36,10 +37,33 @@ class hamiltonian(object):
 		else:
 			return(x)
 
+
+def save_(i_theta,n_theta,data,type_='ES',para=None):
+    """
+    type_='chi','N' or 'ES'
+    """
+    if type_=="chi":
+        np.save("./chi/energy_with_different_chi(N{}_theta{}_{})".format(para,n_theta,i_theta),data)
+    elif type_=="N":
+        np.save("./step/energy_in_every_step(chi{}_theta{}_{})".format(para,n_theta,i_theta),data)
+    elif type_ == "ES":
+        np.save("./ES/entanglement_spectrum_with_theta_{}_{}".format(n_theta,i_theta),data)
+    else:
+        print("Wrong type_!")
+
+    return(None)
+
 def idmrg(B,s,N,d,Lp,Rp,w,chi,H_bond):
-    y = []
-    energy = []
-    Psi = []
+    """
+    B,s:the initial guess of the wavefunction in the canonical form.
+    N:the number of the steps of the updating
+    d:the dimension of the spin
+    Lp,Rp:the environments
+    w:the MPO
+    chi:the bond-dimension
+    H_bond:the hamiltonian used to get the final results of the GS energy.
+    """
+    energy_in_every_step = []
     if N > 100:
         n_step = 20
     else:
@@ -54,11 +78,10 @@ def idmrg(B,s,N,d,Lp,Rp,w,chi,H_bond):
             # Construct theta matrix #
             theta0 = np.tensordot(np.diag(s[ia]),np.tensordot(B[ib],B[ic],axes=(2,1)),axes=(1,1))
             theta0 = np.reshape(np.transpose(theta0,(1,0,2,3)),((chia*chic)*(d**2)))
-            # print(theta0.shape)
 
             # Diagonalize Hamiltonian #
             H = hamiltonian(Lp,Rp,w,dtype=float)
-            e0,v0 = arp.eigsh(H,k=1,which='SA',return_eigenvectors=True,v0=theta0)
+            e0,v0 = arp.eigsh(H,k=1,which='SA',return_eigenvectors=True,v0=theta0,tol=1e-14)
             theta = np.reshape(v0.squeeze(),(d*chia,d*chic));
 
             # Schmidt deomposition #
@@ -90,19 +113,19 @@ def idmrg(B,s,N,d,Lp,Rp,w,chi,H_bond):
                 C = np.tensordot(sBB,np.reshape(H_bond,[d,d,d,d]),axes=([1,2],[2,3]))
                 E.append(np.squeeze(np.tensordot(np.conj(sBB),C,
                                                  axes=([0,3,1,2],[0,1,2,3]))).item())
-            if step % n_step == 0:
-                energy.append(np.mean(E))
-                Psi.append(theta)
+        if step % (n_step) == 0:
+            energy_in_every_step.append(np.mean(E).real)
+            print("step{}".format(step),np.mean(E).real)
 
 
-    return(B,s,Psi,energy)
+    return(B,s,energy_in_every_step,theta)
 
 
 
 def main():
-    sx = np.array([[0.,1.],[1.,0.]])
-    sz = np.array([[1.,0.],[0.,-1.]])
-    sy = np.array([[0,-1j],[1j,0]])
+    sx = 1/2*np.array([[0.,1.],[1.,0.]])
+    sy = 1/2*np.array([[0,-1.0j],[1.0j,0]])
+    sz = 1/2*np.array([[1.,0.],[0.,-1.]])
 
     SX = 1/np.sqrt(2)*np.array([[0.,1.,0.],[1.,0.,1.],[0.,1.,0.]])
     SY = 1/np.sqrt(2)*np.array([[0.,-1.0j,0.],[1.0j,0.,-1.0j],[0.,1.0j,0.]])
@@ -110,19 +133,16 @@ def main():
 
 
     # First define the parameters of the model / simulation
-    g=0.5; d=2;
     N=FLAGS.N
     chi = FLAGS.chi
     J = FLAGS.J
-    n_chi = FLAGS.n_chi
-    theta = FLAGS.theta*np.pi
-    d=3; d_of_MPO = 14
-    Jl = np.cos(theta)
-    Jq = np.sin(theta)
+    n_chi = FLAGS.n_chi*5
 
     # Generate the Hamiltonian, MPO, and the environment
     # # Ising model
+    # d = 2
     # H_bond = np.array( [[J,g/2,g/2,0], [g/2,-J,0,g/2], [g/2,0,-J,g/2], [0,g/2,g/2,J]] )
+    # H_bond = np.array( [[J,g,g,0], [g,-J,0,g], [g,0,-J,g], [0,g,g,J]] )
     # w = np.zeros((3,3,2,2),dtype=np.float)
     # w[0,:2] = [np.eye(2),sz]
     # w[0:,2] = [g*sx, J*sz, np.eye(2)]
@@ -130,7 +150,8 @@ def main():
     # Rp = np.zeros([1,1,3]); Rp[0,0,2] = 1.
 
     # # heisenberg model
-    # H_bond = np.array([[J,0,0,0],[0,-J,2*J,0],[0,2*J,-J,0],[0,0,0,J]])
+    # d = 2
+    # H_bond = J*(np.dot(sx,sx)+np.dot(sy,sy)+np.dot(sz,sz))
     # w = np.zeros((5,5,d,d),dtype=np.complex)
     # w[0,:4] = [np.eye(2), sx, sy, sz]
     # w[1:,4] = [J*sx, J*sy, J*sz, np.eye(2)]
@@ -138,25 +159,47 @@ def main():
     # Rp = np.zeros([1,1,5]); Rp[0,0,4] = 1.
 
     # Bilinear-biquadratic model
+    eye = np.dot(np.eye(3),np.eye(3))
+    i_theta = FLAGS.i_theta
+    n_theta = FLAGS.n_theta
+    theta = 2.*np.pi/n_theta*i_theta
+    d = 3
+    Jl = np.cos(theta)
+    Jq = np.sin(theta)
+
+    SXX = np.dot(SX,SX); SYY = np.dot(SY,SY); SZZ = np.dot(SZ,SZ)
+    SXY = np.dot(SX,SY); SYZ = np.dot(SY,SZ); SZX = np.dot(SZ,SX)
+    SXZ = np.dot(SX,SZ); SYX = np.dot(SY,SX); SZY = np.dot(SZ,SY)
+
     H_bond = Jl*(np.kron(SX,SX)+np.kron(SY,SY)+np.kron(SZ,SZ))\
-             +Jq*(np.kron(SX*SX,SX*SX)+np.kron(SY*SY,SY*SY)+np.kron(SZ*SZ,SZ*SZ)\
-             +np.kron(SX*SY,SX*SY)+np.kron(SY*SX,SY*SX)+np.kron(SY*SZ,SY*SZ)\
-             +np.kron(SZ*SY,SZ*SY)+np.kron(SZ*SX,SZ*SX)+np.kron(SX*SZ,SX*SZ))
+             +Jq*(np.kron(SXX,SXX)+np.kron(SYY,SYY)+np.kron(SZZ,SZZ)\
+             +np.kron(SXY,SXY)+np.kron(SYX,SYX)+np.kron(SYZ,SYZ)\
+             +np.kron(SZY,SZY)+np.kron(SZX,SZX)+np.kron(SXZ,SXZ))
+    # H_bond = Jl*(np.kron(SX,SX)+np.kron(SY,SY)+np.kron(SZ,SZ))\
+    #          +1/3*Jq*(np.kron(SXX,SXX)+np.kron(SYY,SYY)+np.kron(SZZ,SZZ)\
+    #                   +np.kron(SXY,SXY)+np.kron(SYX,SYX)+np.kron(SYZ,SYZ)\
+    #                   +np.kron(SZY,SZY)+np.kron(SZX,SZX)+np.kron(SXZ,SXZ)\
+    #                   +np.kron(SXX,eye)+np.kron(SYY,eye)+np.kron(SZZ,eye)\
+    #                   +np.kron(SXY,eye)+np.kron(SYX,eye)+np.kron(SYZ,eye)\
+    #                   +np.kron(SZY,eye)+np.kron(SZX,eye)+np.kron(SXZ,eye)\
+    #                   +np.kron(eye,SXX)+np.kron(eye,SYY)+np.kron(eye,SZZ)\
+    #                   +np.kron(eye,SXY)+np.kron(eye,SYX)+np.kron(eye,SYZ)\
+    #                   +np.kron(eye,SZY)+np.kron(eye,SZX)+np.kron(eye,SXZ))
     w = np.zeros((14,14,d,d),dtype=np.complex)
-    w[0,:13] = [np.eye(d), SX, SY, SZ, SX*SX, SY*SY, SZ*SZ, SX*SY, SY*SX,
-                SY*SZ, SZ*SY, SZ*SX, SX*SZ]
-    w[1:,13] = [Jl*SX, Jl*SY, Jl*SZ, Jq*SX*SX, Jq*SY*SY, Jq*SZ*SZ, Jq*SX*SY, Jq*SY*SX,
-                Jq*SY*SZ, Jq*SZ*SY, Jq*SZ*SX, Jq*SX*SZ, np.eye(d)]
+    w[0,:13] = [np.eye(d), SX, SY, SZ, SXX, SYY, SZZ, SXY, SYX,
+                SYZ, SZY, SZX, SXZ]
+    w[1:,13] = [Jl*SX, Jl*SY, Jl*SZ, Jq*SXX, Jq*SYY, Jq*SZZ, Jq*SXY, Jq*SYX,
+                Jq*SYZ, Jq*SZY, Jq*SZX, Jq*SXZ, np.eye(d)]
     Lp = np.zeros([1,1,14]); Lp[0,0,0] = 1.
     Rp = np.zeros([1,1,14]); Rp[0,0,13] = 1.
 
-    Energy_with_dffrt_chi = []
-    for chi2 in range(chi,chi+n_chi):
+    energy_with_dffrt_chi = []
+    for chi2 in np.arange(chi,chi+n_chi+1,5):
         B=[];s=[]
         for i in range(2):
-            B.append(np.zeros([3,1,1])); B[-1][0,0,0]=1
+            B.append(np.zeros([d,1,1])); B[-1][0,0,0]=1
             s.append(np.ones([1]))
-        B,s,Psi,energy = idmrg(B,s,N,d,Lp,Rp,w,chi2,H_bond)
+        B,s,energy_in_every_step,Theta = idmrg(B,s,N,d,Lp,Rp,w,chi2,H_bond)
         # # Get the bond energies
         E=[];
         for i_bond in range(2):
@@ -165,66 +208,48 @@ def main():
             C = np.tensordot(sBB,np.reshape(H_bond,[d,d,d,d]),axes=([1,2],[2,3]))
             E.append(np.squeeze(np.tensordot(np.conj(sBB),C,
                                              axes=([0,3,1,2],[0,1,2,3]))).item())
-        Energy_with_dffrt_chi.append(np.mean(E))
-        print("E_iDMRG ={}, chi={}".format(np.mean(E), chi2))
+        energy_with_dffrt_chi.append(np.mean(E))
+        print("E_iDMRG ={}, chi={}".format(np.mean(E).real, chi2))
+        delta = np.abs(np.mean(E)-energy_with_dffrt_chi[-1])
+        if delta <= 1e-4:
+            print('GOOD RESULT')
+        else:
+            print('BAD RESULT')
+    if n_chi > 0:
+        save_(para=N,i_theta=i_theta,n_theta=n_theta,data=energy_with_dffrt_chi,type_='chi')
+    else:
+        save_(para=chi,i_theta=i_theta,n_theta=n_theta,data=energy_in_every_step,type_='N')
 
-
-
-    # # exact energy for Ising model
+    # exact energy for Ising model
     # f = lambda k,g : -2*np.sqrt(1+g**2-2*g*np.cos(k))/np.pi/2.
     # E0_exact = integrate.quad(f, 0, np.pi, args=(g,))[0]
-    # print("E_exact =", E0_exact)
+    # print("E_exact =", E0_exact) # -1.0635
 
     # # exact GS energy for BLB with theta = arctan(1/3)
-    print("E_exact = ", -1/6.*3/np.sqrt(10))
-
-    # plot energy vs step&chi
-    fig, ax = plt.subplots(1,1)
-    ax.set_ylabel('GS energy')
-
-    ax.plot(range(chi2,chi2+n_chi),Energy_with_dffrt_chi)
-    ax.set_xlabel('$\chi$')
-    ax.set_ylim(-1.6,-1.4)
-    ax.set_title('$N = {}$'.format(N))
-    plt.tight_layout()
-    plt.savefig('N_{}.png'.format(N))
-
-
-    # ax.plot(range(len(energy)),energy)
-    # ax.set_xlabel('Step')
-    # ax.set_title('$\chi = {}$'.format(chi2))
-    # plt.tight_layout()
-    # plt.savefig('chi_{}.png'.format(chi2))
+    # print("E_exact = ", -2/3 * 3/np.sqrt(10)) # -0.635
 
     # output the Entanglement Spectrum
-    print('Bipartition Entanglement Spectrum')
+    # print('Bipartition Entanglement Spectrum')
     es = -np.log(np.mean(np.array(s), axis=0))
     es = np.sort(es)
-    ES = pd.Series([1],index=[es[0]])
-    j = 0;k = 1
-    for i in es[1:]:
-        if np.abs(i-es[j]) < k:
-            ES[es[j]] += 1
-        else:
-            ES = ES.append(pd.Series([1],index=[i]))
-            j += ES[es[j]]
-    df = pd.DataFrame({'Entanglement energy': ES.index,
-                       'Degeneracy': ES.data},
-                       columns=['Entanglement energy', 'Degeneracy'])
-    print(df)
+    save_(i_theta=i_theta,n_theta=n_theta,data=es,type_='ES',para=i_theta)
+    # df = degenerate_(es)
+    # print(df)
 
 
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()
-    parser.add_argument('--chi',type=int, default=20,
+    parser.add_argument('--chi',type=int, default=10,
                         help='bond dimension')
     parser.add_argument('--J',type=float, default=1.,
                         help='J')
-    parser.add_argument('--n_chi',type=int, default=1,
+    parser.add_argument('--n_chi',type=int, default=0,
                         help='n_chi')
-    parser.add_argument('--theta',type=float, default=np.arctan(1/3.)/np.pi,
-                        help='theta in unit of pi')
+    parser.add_argument('--n_theta', type=int,default=2,
+                        help='number of theta sampled in a 2pi')
+    parser.add_argument('--i_theta', type=int,default=0,
+                        help='number of units of 2pi/n_theta in theta')
     parser.add_argument('--N',type=int, default=15,
                         help='number of steps')
     FLAGS = parser.parse_args()
