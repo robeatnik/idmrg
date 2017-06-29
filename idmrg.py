@@ -97,12 +97,7 @@ def idmrg(B, s, N, d, Lp, Rp, w, chi, H_bond):
             # Diagonalize Hamiltonian #
             H = hamiltonian(Lp, Rp, w, dtype=float)
             e0, v0 = arp.eigsh(
-                H,
-                k=1,
-                which='SA',
-                return_eigenvectors=True,
-                v0=theta0,
-                tol=1e-14)
+                H, k=1, which='SA', return_eigenvectors=True, v0=theta0)
             theta = np.reshape(v0.squeeze(), (d * chia, d * chic))
 
             # Schmidt deomposition #
@@ -147,12 +142,12 @@ def idmrg(B, s, N, d, Lp, Rp, w, chi, H_bond):
                                                    ))).item())
         if step % (n_step) == 0:
             energy_in_every_step.append(np.mean(E).real)
-            print("step{}".format(step + 1), np.mean(E).real)
+            # print("step{}".format(step + 1), np.mean(E).real)
 
     return (B, s, energy_in_every_step, theta)
 
 
-def get_ES(N, chi, n_chi, i_theta, n_theta, ES=True):
+def get_ES(i_theta, n_theta, N=15, chi=2, n_chi=0, ES=True):
     sx = 1 / 2 * np.array([[0., 1.], [1., 0.]])
     sy = 1 / 2 * np.array([[0, -1.0j], [1.0j, 0]])
     sz = 1 / 2 * np.array([[1., 0.], [0., -1.]])
@@ -240,19 +235,20 @@ def get_ES(N, chi, n_chi, i_theta, n_theta, ES=True):
                         np.conj(sBB), C, axes=([0, 3, 1, 2], [0, 1, 2, 3])))
                 .item())
         energy_with_dffrt_chi.append(np.mean(E))
-        print("E_iDMRG ={}, chi={}".format(np.mean(E).real, chi2))
-        delta = np.abs(np.mean(E) - energy_with_dffrt_chi[-1])
-        if delta <= 1e-4:
-            print('GOOD')
+        # print("E_iDMRG ={}, chi={}".format(np.mean(E).real, chi2))
+        delta = np.abs(np.mean(E) - energy_in_every_step[-2])
+        if delta <= 1e-3:
+            # print('GOOD')
             moreN = 0
         else:
-            print('BAD')
+            # print('BAD')
             moreN = 1
+    GS_energy = np.mean(E).real
     if n_chi > 0:
         # if there is more than 1 chi case, it means we are focusing on the energy convergence with
         # different chi
         save_(
-            para0=chi+n_chi,
+            para0=chi + n_chi,
             para=N,
             i_theta=i_theta,
             n_theta=n_theta,
@@ -270,20 +266,22 @@ def get_ES(N, chi, n_chi, i_theta, n_theta, ES=True):
 
     # # compute the Entanglement Spectrum
     # print('Bipartition Entanglement Spectrum')
-    for si in s:
-        print(si.shape)
+    # using s directly
     # if ES:
-    es = -np.log(np.mean(np.array(s), axis=0))
+    #     es = -np.log(np.mean(np.array(s), axis=0))
+    #     es = np.sort(es)
+    # save_(
+    #     i_theta=i_theta,
+    #     n_theta=n_theta,
+    #     data=es,
+    #     type_='ES',
+    #     para=i_theta)
+    X, Y, Z = np.linalg.svd(Theta)
+    Y = Y[:chi] / np.sqrt(sum(Y[:chi]**2))
+    es = -np.log(Y)
     es = np.sort(es)
-        # save_(
-        #     i_theta=i_theta,
-        #     n_theta=n_theta,
-        #     data=es,
-        #     type_='ES',
-        #     para=i_theta)
+    # # print the es and its degeneracy
+    # df = degenerate_(es)
+    # print(df)
 
-        # # print the es and its degeneracy
-        # df = degenerate_(es)
-        # print(df)
-
-    return (moreN,es)
+    return (GS_energy, moreN, es)
