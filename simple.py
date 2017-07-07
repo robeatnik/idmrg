@@ -12,8 +12,10 @@ import argparse
 import pandas as pd
 import matplotlib.pyplot as plt
 from exact import degenerate_
-
+import argparse
 from scipy.sparse.linalg import ArpackNoConvergence
+
+FLAGS = None
 
 
 # Define the Hamiltonian
@@ -184,16 +186,16 @@ def get_ES(i_theta, n_theta, N=15, chi=2):
     ]
     dmpo = 14
 
-    # # http://arxiv.org/abs/0910.1811v2 equation(3) spin1 Heisenberg
-    # J = n_theta
-    # uzz = i_theta
-    # dmpo = 5
-    # H_bond = J * (np.kron(SX, SX) + np.kron(SY, SY) + np.kron(SZ, SZ)
-    #               ) + 1/2*uzz * (np.kron(SZ, np.eye(3)) + np.kron(np.eye(3), SZ))
-    # w = np.zeros((5, 5, d, d), dtype=np.complex)
-    # w[0, :] = [np.eye(d), SX, SY, SZ, uzz * SZZ]
-    # w[1:, 4] = [SX, SY, SZ, np.eye(d)]
-
+    # http://arxiv.org/abs/0910.1811v2 equation(3) spin1 Heisenberg
+    J = n_theta
+    uzz = i_theta
+    dmpo = 5
+    H_bond = J * (
+        np.kron(SX, SX) + np.kron(SY, SY) + np.kron(SZ, SZ)) + 1 / 2 * uzz * (
+            np.kron(SZ, np.eye(3)) + np.kron(np.eye(3), SZ))
+    w = np.zeros((5, 5, d, d), dtype=np.complex)
+    w[0, :] = [np.eye(d), SX, SY, SZ, uzz * SZZ]
+    w[1:, 4] = [SX, SY, SZ, np.eye(d)]
 
     # environment is commonly used..
     Lp = np.zeros([1, 1, dmpo])
@@ -218,9 +220,9 @@ def get_ES(i_theta, n_theta, N=15, chi=2):
 
 
 def main():
-    n_theta = 2
+    n_theta = FLAGS.n_theta
     N = 15
-    chi = 20
+    chi = FLAGS.chi
     es = []
     # for i_theta in np.arange(n_theta):
     #     print('i =', i_theta)
@@ -239,7 +241,7 @@ def main():
         except ArpackNoConvergence:
             continue
         es.append(es_temp)
-    print(es)
+    # print(es)
     fig, ax = plt.subplots(1)
     props = dict(boxstyle='square', alpha=0.5, facecolor='white')
 
@@ -247,11 +249,11 @@ def main():
         site = (i + 1) * np.ones([v.shape[0]])
         plt.errorbar(site, v, xerr=0.5, fmt=' ', color='blue')
 
-    # xticks = [0, 0.5, 1, 1.5, 2]
+    # # xticks = [0, 0.5, 1, 1.5, 2]
+    # xticks = [-1, -0.5, 0, 0.5, 1, 1.5, 2]
     # xticks = np.array(xticks)
-    # n = n_theta / xticks[-1]
-    # plt.xticks(n_theta / xticks[-1] * xticks, xticks)
-
+    # slope = n_theta / (xticks[-1] - xticks[0])
+    # plt.xticks(slope * xticks + 0 - slope * xticks[0], xticks)
     ymax = 12
     # plt.axvline(x=0.25 * n_theta / xticks[-1], ymax=ymax)
     # plt.axvline(x=0.50 * n_theta / xticks[-1], ymax=ymax)
@@ -261,7 +263,7 @@ def main():
     # ymin, ymax = ylim[:]
     # plt.xlim(0, 2 * n)
     # plt.ylim(0, ymax)
-    plt.ylim(0,13)
+    plt.ylim(0, 13)
     # textstr = '$N = %d$\n$chi=%d$' % (N, chi)
     # plt.text(
     #     0.05 * n_theta,
@@ -275,9 +277,15 @@ def main():
     # plt.ylabel('Entanglement Energy')
     plt.tight_layout()
     plt.savefig('14893_0_0910_1811_{}.pdf'.format(chi))
+    # plt.savefig('es_theta_{}_chi_{}'.format(n_theta, chi))
     plt.show()
     return None
 
 
 if __name__ == "__main__":
+    parser = argparse.ArgumentParser()
+    parser.add_argument('--chi', type=int, default=10, help='bond dimension')
+    parser.add_argument(
+        '--n_theta', type=int, default=60, help='# of steps in a 2pi')
+    FLAGS = parser.parse_args()
     main()

@@ -106,7 +106,6 @@ def vs_step(N, chi, i_theta, n_theta, data=False):
     plt.ylabel("$|E_\mathrm{idmrg}-E_\mathrm{exact}|$")
     plt.yticks([0, 1e-17, 1e-16, 1e-15, 1e-13, 1e-7, 1e-1])
     plt.xlabel("step")
-from scipy.sparse.linalg import ArpackNoConvergence
     plt.plot(step, energy_in_every_step)
 
     plt.tight_layout()
